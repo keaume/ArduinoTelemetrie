@@ -24,3 +24,5 @@ Familiarisation avec le code pilote LM35_thingspeak
                                                           http://www.locoduino.org/spip.php?article69 "Entrées/Sorties numériques" et http://playground.arduino.cc/Main/ArduinoPinCurrentLimitations
                                                           tu ne dois pas dépasser 40mA de courant sur chaque voie pour un total de 200mA max.
 Valider le courant nécessaire pour toutes les sondes
+
+Voir si les thermocouples peuvent se brancher sur une seule broche et être analyser par thingspeak ou non
