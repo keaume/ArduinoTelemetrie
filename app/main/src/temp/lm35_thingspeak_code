@@ -6,6 +6,9 @@
 // Author: Mahesh Venkitachalam
 // Website: electronut.in
 
+/* ! COMMENT ==> /* */ ! //
+
+
 #include <SoftwareSerial.h>
 #include <stdlib.h>
 
