@@ -20,5 +20,5 @@ Familiarisation avec à la plateforme Arduino IDE
 Familiarisation avec le code pilote LM35_thingspeak 
 Évaluer la faisabilité du projet d’intégration des différentes sondes avec Arduino UNO.
 Valider l’espace physique disponible sur le Arduino UNO 
-Valider le courant maximal que le arduino UNO peut tirer     http://www.locoduino.org/spip.php?article69 "Entrées/Sorties numériques"
+Valider le courant maximal que le arduino UNO peut tirer     http://www.locoduino.org/spip.php?article69 "Entrées/Sorties numériques" et http://playground.arduino.cc/Main/ArduinoPinCurrentLimitations
 Valider le courant nécessaire pour toutes les sondes
