@@ -25,4 +25,8 @@ Familiarisation avec le code pilote LM35_thingspeak
                                                           tu ne dois pas dépasser 40mA de courant sur chaque voie pour un total de 200mA max.
 Valider le courant nécessaire pour toutes les sondes
 
+La consommation d'une Arduino est faible par principe, dans l'ordre de 55-70 mA. Toutefois, elle peut encore être optimisée suivant le 
+traitement à faire (la mettre à mode veille et ne la réveiller que lors de la prise des mesures et envois des données - à définir lors
+de la programmation).
+
 Voir si les thermocouples peuvent se brancher sur une seule broche et être analyser par thingspeak ou non
