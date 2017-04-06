@@ -103,6 +103,13 @@ void loop() {
     Serial.println("AT+CIPCLOSE");
   }
   
+  /*     while (ser.available())
+    {
+         char c = ser.read();
+         Serial.write(ser.read());
+         if (c == '\r') Serial.print('\n');
+    }
+  */
 
     
   // thingspeak needs 15 sec delay between updates
