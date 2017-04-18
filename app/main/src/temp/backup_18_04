@@ -1,0 +1,237 @@
+
+
+
+/* ----------------------------------------- */
+/* -----      Librairies utilisées     ----- */
+/* ----------------------------------------- */
+
+#include "WiFiEsp.h"
+// Emulate Serial1 on pins 10/11 if not present
+#ifndef HAVE_HWSERIAL1
+#include "SoftwareSerial.h"
+SoftwareSerial Serial1(10, 11);// RX, TX
+#endif
+#define TSIP "184.106.153.149"                            // L'adresse IP de la plateforme thingspeak.com
+#define TSAPIKey "GET /update?api_key=BSKYZ67DV68B0B9J"   // La clef récupérée sur thingspeak.com, à utiliser pour envoyer les données
+/* ----------------------------------------- */
+/* --- Définition des variables globales --- */
+/* ----------------------------------------- */
+
+char ssid[] = "iPhone de Antoine";                // your network SSID (name)
+char pass[] = "1234567890";      //79FC371C                  your network password
+int status = WL_IDLE_STATUS;                   // the Wifi radio's status
+String apiKey = "BSKYZ67DV68B0B9J";           // API Thingspeak channel
+int ledPin = 13;
+int lm35Pin = 0;
+
+/* ----------------------------------------- */
+/* -- Boucle qui ne se lance qu'une fois --- */
+/* ----------------------------------------- */
+
+void setup()
+{
+  // initialize the digital pin as an output.
+  pinMode(ledPin, OUTPUT);
+  // initialize serial for debugging
+  Serial.begin(9600);
+  delay(500);
+  // initialize serial for ESP module
+  Serial1.begin(115200);
+  delay(500);
+  // initialize ESP module
+  WiFi.init(&Serial1);
+  delay(500);
+
+  // check for the presence of a shield
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield not present");
+    delay(1000);
+  }
+
+  // attempt to connect to WiFi network
+  while ( status != WL_CONNECTED) {
+    Serial.println(" ");
+    Serial.print("Attempting to connect to WPA SSID: ");
+    Serial.println(ssid);
+    Serial.println("...........");
+    delay(400);
+    Serial.println(".........");
+    delay(400);
+    Serial.println(".......");
+    delay(400);
+    Serial.println(".....");
+    delay(400);
+    Serial.println("...");
+    delay(400);
+    Serial.println(".");
+    delay(10);
+    // Connect to WPA/WPA2 network
+    status = WiFi.begin(ssid, pass);
+    delay(3000);
+  }
+
+  Serial1.println("You're connected to the network");
+}
+
+/* ----------------------------------------- */
+/* ------ Loop qui se lance en boucle ------ */
+/* ----------------------------------------- */
+
+void loop()
+{
+  // print the network connection information every 30 seconds
+  /*Serial.println();
+  delay(500);
+  */
+  printTempData();
+ // printCurrentNet();  // Fonction qui donne le SSID, BSSID, RSSI
+ // printWifiData(); // Fonction qui donne l'IP et l'adresse MAC
+  // Fonction qui récupère les temp
+  // les envoies à Thingspeak
+  delay(10000);
+}
+
+void printTempData()
+{
+    // faire clignoter la LED on board
+  digitalWrite(ledPin, HIGH);   
+  digitalWrite(ledPin, LOW);
+
+  // read the value from LM35.
+  // read 10 values for averaging.
+  int val = 0;
+  for(int i = 0; i < 10; i++) {
+      val += analogRead(lm35Pin);   
+      delay(500);
+  }
+  // convert to temp:
+  // temp value is in 0-1023 range
+  // LM35 outputs 10mV/degree C. ie, 1 Volt => 100 degrees C
+  // So Temp = (avg_val/1023)*5 Volts * 100 degrees/Volt
+  float temp = val*50.0f/1023.0f;
+
+  // convert to string
+  char buf[16];
+  String strTemp = dtostrf(temp, 4, 1, buf);
+  // String strTemp = String(temp, 1);
+  Serial.println(" ");
+  Serial.println(strTemp); // affichage de la température (25.9)
+
+ /*   while ( status != WL_CONNECTED)
+    {
+*/
+ // Serial1.println("AT+RST"); // se déconnecte du wifi également ON DEMANDE DE SE CONNECTER A DEUX AT+CIPSART EN MEME TEMPS C'EST POURQUOI IL ENVOIE IREN AU SERVEUR
+ delay(5000); 
+ Serial1.println("At+CIPMUX=1");
+ String cmtToTSP = "AT+CIPSTART=\"TCP\",\"";
+ Serial1.flush();
+ cmtToTSP += TSIP;
+ cmtToTSP += "\",80";
+ Serial1.println(cmtToTSP);
+
+ 
+ /* Serial1.println("AT+CIPSTART=\"TCP\",\"TSIP\",80");    */                       // Vider le buffer de reception du port
+  delay(1500);
+ 
+
+  if((Serial1.find("OK")) || (Serial1.find("ok")))                 // ESP8266 n'a pas bien répondu
+  {
+    Serial.println("Connexion au serveur réussie");                 // Affichage Ordinateur
+  }
+  else    // ESP8266 n'a bien répondu
+  {
+    Serial.println("Echec de la Connexion au serveur !");             // Affichage Ordinateur
+  }
+    
+  // prepare GET string
+String getStr = "GET /update?api_key=BSKYZ67DV68B0B9J";
+getStr = getStr + "&field1=" + strTemp + + "\r\n\r\n";
+/*getStr = getStr + "=" + strTemp;*/
+
+cmtToTSP = "AT+CIPSEND=52";
+Serial.flush();
+int tailleCmd = getStr.length();
+  Serial.print("Taille des données à envoyer : ");
+  Serial.print(tailleCmd);
+  Serial.println("octets");
+  Serial1.print(cmtToTSP);
+  Serial1.println(tailleCmd);
+  Serial1.flush();
+  Serial1.print(getStr);
+  delay(15000);
+  
+  char retoursend = Serial1.read();
+  Serial.print("retour Ser après envoi : ");
+  Serial.print(retoursend);
+  
+ if(retoursend == ">") // envoie des données MODIF
+ { 
+    Serial1.print(getStr); 
+    Serial.println("Données bien envoyées !");
+    
+    delay(100);
+  }
+
+else
+{ 
+    Serial.println("Données non envoyées !");
+    delay(100);
+}
+
+}
+
+
+void printWifiData()
+{
+  // print your WiFi shield's IP address
+  IPAddress ip = WiFi.localIP();
+  delay(1000);
+  Serial.print("IP Address: ");
+  delay(2000);
+  Serial.println(ip);
+  delay(1000);
+
+  // print your MAC address
+  byte mac[6];
+  delay(1000);
+  WiFi.macAddress(mac);
+  delay(1000);
+  char buf[20];
+  sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
+  delay(1000);
+  Serial.print("MAC address: ");
+  delay(2000);
+  Serial.println(buf);
+  delay(1000);
+}
+
+void printCurrentNet()
+{
+  // print the SSID of the network you're attached to
+  Serial.println(" ");
+  Serial.print("SSID: ");
+  delay(2000);
+  Serial.println(ssid);
+  delay(1000);
+
+  // print the MAC address of the router you're attached to
+  byte bssid[6];
+  delay(1000);
+  WiFi.BSSID(bssid);
+  delay(1000);
+  char buf[20];
+  sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X", bssid[5], bssid[4], bssid[3], bssid[2], bssid[1], bssid[0]);
+  delay(1000);
+  Serial.print("BSSID: ");
+  delay(1000);
+  Serial.println(buf);
+  delay(1000);
+
+  // print the received signal strength
+  long rssi = WiFi.RSSI();
+  delay(1000);
+  Serial.print("Signal strength (RSSI): ");
+  delay(1000);
+  Serial.println(rssi);
+  delay(1000);
+}
