@@ -1,0 +1,312 @@
+/*************************************************************************************************/
+/* --------------------------------------------------------------------------------------------- */
+/*                                                                                               */
+/* ----------------------------       Written by Antoine Toenz     ----------------------------- */
+/*                                                                                               */
+/* --------------------------------------------------------------------------------------------- */
+/*************************************************************************************************/
+
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ------------------------------       Librairies utilisées     ------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+
+#include <SoftwareSerial.h>
+#include <WiFiEsp.h>                      
+
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------       Définitions des variables gloables     ------------------------ */
+
+/* --------------------------------------------------------------------------------------------- */
+
+String apiKey = "NQR2DT5TAC8W6KWO";                        // your API KEY (Thingspeak channel)
+char ssid[] = "marmott energies";                          // your network SSID (name)
+char pass[] = "79FC371C";                                  // your network password
+int status = WL_IDLE_STATUS;                               // Default status of WiFi
+SoftwareSerial Serial1(10,11);                             // Définition de RX et TX
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -------------------------------       Réglages de bases     --------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void setup() 
+{
+  Serial.begin(115200);                                   // Réglage des bauds du Serial
+  delay(500);
+  Serial1.begin(115200);                                  // Réglage des bauds de l'ESP8266
+  delay(500);
+  dataATRST();                                            // Reset de l'ESP8266
+  delay(2000);
+  dataAT();                                               // Fonction Commande AT
+  delay(2000);
+  dataCWMODE();                                           // Fonction Commande AT+CWMODE=1
+  delay(500);
+  dataWIFI();                                             // Fonction Connexion Wi-Fi
+  delay(500);
+  dataCIPMUX();                                           // Fonction Commande AT+CIPMUX=1
+  delay(500);
+  dataSERVER();                                           // Fonction Commande AT+CIPSERVER=1,80
+  delay(1000);
+  printWifiData();                                        // Fonction Récupération IP et MAC
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ----------------------       Boucle qui s'exécute plusieurs fois     ------------------------ */
+
+/* --------------------------------------------------------------------------------------------- */
+
+
+void loop()
+{
+  Serial.println(" ");
+  dataConnection();                                       // Fonction qui se connecte au serveur, 
+                                                          //  qui get et qui envoie les donneés
+  delay(30000);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* --------------------------       Fonction pour AT+CIPSERVER     ----------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataSERVER()
+{
+    Serial1.println("AT+CIPSERVER=1,80");                 // Déinition de l'identifiant et du port
+      if(Serial1.find("OK"))                                                       
+  {                                                       ////////////////////////////////////////
+    Serial.println("Serveur configuré");                  //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////                 
+   Serial.println("ERROR SERVER");
+  }
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ---------------------------       Fonction pour AT+CWMODE=1     ----------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataCWMODE()
+{
+  Serial1.println("AT+CWMODE=1");                         // Définiton du WIFI mode (1 = client)
+      if(Serial1.find("OK"))
+  {                                                       ////////////////////////////////////////
+    Serial.println("WIFI MODE configuré");                //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR MODE");
+  }
+  
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------       Fonction pour la connexion Wi-Fi     -------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+
+void dataWIFI()
+{
+  WiFi.init(&Serial1);                                    // Initialisation de l'ESP8266 au WiFi
+  delay(500);
+  if (WiFi.status() == WL_NO_SHIELD)                      // Présence d'un Shield ou non
+  {                    
+    Serial.println("WiFi shield not present");
+    delay(1000);
+  }
+  while ( status != WL_CONNECTED) {                       // Attend que cela se connecte au WiFi
+    Serial.println(" ");
+    Serial.print("Attempting to connect to WPA SSID: ");
+    Serial.println(ssid);
+    Serial.println("...........");
+    delay(400);
+    Serial.println(".........");
+    delay(400);
+    Serial.println(".......");
+    delay(400);
+    Serial.println(".....");
+    delay(400);
+    Serial.println("...");
+    delay(400);
+    Serial.println(".");
+    delay(10);
+    // Connect to WPA/WPA2 network
+    status = WiFi.begin(ssid, pass);                      // Connexion au WiFi avec un SSID et PASS
+    delay(8000);
+  }
+  Serial1.println("You're connected to the network");
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* --------------------------------       Fonction pour AT     --------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataAT()
+{
+  Serial1.println("AT");
+  if(Serial1.find("OK"))
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande AT configurée");             //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR AT");
+  }
+  delay(2000);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------------       Fonction pour AT+RST     -------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataATRST()
+{
+  Serial1.println("AT+RST");                              // Permet de Reset l'ESP8266
+  if(Serial1.find("ready") || Serial1.find("READY"))
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande RESET bien effectuée");      //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+    Serial.println("ERROR RESET");
+  }
+  delay(500);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ---------------------------       Fonction pour AT+CIPMUX=1     ----------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataCIPMUX()
+{
+  Serial1.println("AT+CIPMUX=1");                         // Mise en place de la connexion Multiple
+  delay(500);
+    if(Serial1.find("OK"))
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande MUX bien effectuée");        //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR MUX");
+  }
+  char inData[20];
+  char inChar;
+  byte index = 0;
+  while(Serial.available() > 0)
+  {
+    if(index <19)
+    {
+      inChar = Serial.read();
+      inData[index] = inChar;
+      index++;
+      inData[index] = '\0';
+    }
+         Serial.print("I received: ");
+         Serial.println(inData);                         // Voir ce que l'on reçoit
+  }
+delay(5000);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ---------------       Fonction pour Connexion au serveur, Get et Send     ------------------ */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataConnection()
+{
+  int incomingByte = 0;
+  String cmd = "AT+CIPSTART=1,\"TCP\",\"";             // Connexion au serveur Thingspeak
+  cmd += "184.106.153.149";                            // api.thingspeak.com
+  cmd += "\",80";                                      // Port utilisé
+  Serial1.println(cmd);
+  Serial.println(cmd);
+  delay(300);
+               incomingByte = Serial1.read();
+               Serial.print("I received: ");
+               Serial.println(incomingByte);           // Voir ce que l'on reçoit
+                
+  if(Serial1.find("1") || Serial1.find("OK") || Serial1.find("CONNECT"))
+  
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande START bien effectuée");      //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR START");
+ //  Serial1.println(cmd);
+   
+  }
+  if(Serial1.find("ERROR"))
+  {
+    Serial.println("AT+CIPSTART error");
+    return;
+  }
+  delay(200);
+  
+  int strTemp=20;
+  String getStr = "GET /update?api_key=";                 // Définition de quelle valeur dans quel champ
+  getStr += apiKey;
+  getStr +="&field1=";
+  getStr += String(strTemp);
+  getStr += "\r\n\r\n";
+
+  // send data length
+  cmd = "AT+CIPSEND=1,";
+  cmd += String(getStr.length());
+  Serial1.println(cmd);
+  Serial.println(cmd);
+  delay(500);
+  Serial.println(getStr);
+  Serial1.println(getStr);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------       Fonction pour récupérer IP et MAC     ------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void printWifiData()                                      // Permet de récupérer IP et MAC
+{
+  // print your WiFi shield's IP address
+  IPAddress ip = WiFi.localIP();
+  delay(5000);
+  Serial.print("IP Address: ");
+  delay(2000);
+  Serial.println(ip);
+  delay(2000);
+
+  // print your MAC address
+  byte mac[6];
+  delay(1000);
+  WiFi.macAddress(mac);
+  delay(1000);
+  char buf[20];
+  sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
+  delay(1000);
+  Serial.print("MAC address: ");
+  delay(2000);
+  Serial.println(buf);
+  delay(1000);
+}
+
