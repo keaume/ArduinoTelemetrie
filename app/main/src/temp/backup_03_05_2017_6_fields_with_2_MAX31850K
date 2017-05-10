@@ -38,7 +38,7 @@
 
 #define APIKey "GET /update?api_key=NQR2DT5TAC8W6KWO"      // Définition de la clé Thingspeak utilisée
 #define ONE_WIRE_BUS 48                                   
-char ssid[] = "marmott energies";                          // your network SSID (name)
+char ssid[] = "MARMOTT ENERGIES";                          // your network SSID (name)
 char pass[] = "79FC371C";                                  // your network password
 int status = WL_IDLE_STATUS;                               // Default status of WiFi
 //SoftwareSerial Serial1(10,11);                           // Définition de RX et TX
