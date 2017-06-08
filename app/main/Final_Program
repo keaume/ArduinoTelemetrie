@@ -1,0 +1,558 @@
+/*************************************************************************************************/
+/* --------------------------------------------------------------------------------------------- */
+/*                                                                                               */
+/* ----------------------------       Written by Antoine Toenz     ----------------------------- */
+/* ----------------------------       e-mail: antoine@toenz.com    ----------------------------- */
+/*                                                                                               */
+/* --------------------------------------------------------------------------------------------- */
+/*************************************************************************************************/
+
+  // 1. RESET
+  // 2. AT
+  // 3. MODE
+  // 4. WIFI
+  // 5. CIPMUX
+  // 6. SERVER
+  // 7. WifiData
+  // 8. Loop : Lire temp
+  // 9. Loop : Envoie Thingspeak
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ------------------------------       Librairies utilisées     ------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+#include <DallasTemperature.h>                             // Librairie pour mesure de Température
+#include <SoftwareSerial.h>                                // Librairie pour fonctions basiques
+#include <WiFiEsp.h>                                       // Librairie pour connexion Wi-Fi                 
+#include "EmonLib.h"                                       // Librairie pour calibration Courant
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------       Définitions des variables gloables     ------------------------ */
+
+/* --------------------------------------------------------------------------------------------- */
+
+#define APIKey "GET /update?api_key=NQR2DT5TAC8W6KWO"      // Définition de la clé Thingspeak utilisée
+#define INTDEBIT2 21                                       // Définition du pin concernant le débit                     
+char ssid[] = "MARMOTT ENERGIES";                          // your network SSID (name)
+char pass[] = "79FC371C";                                  // your network password
+int status = WL_IDLE_STATUS;                               // Default status of WiFi
+//SoftwareSerial Serial1(10,11);                           // Définition de RX et TX
+#define ONE_WIRE_BUS 48                                    // Définition du pin Température
+OneWire oneWire(ONE_WIRE_BUS);                             // Définition d'une classe oneWire
+DallasTemperature MAX31850K(&oneWire);
+EnergyMonitor emon1;                                       // Utilisation de la librairie EmonLib
+
+byte NbCapT;                                               // Nombre de capteur
+float MesTemp[4];                                          // Tableau valeur Température
+byte IDsTemp[5][8];                                        // Tableau pour ID des Thermocouples
+float MesCrt[2];                                           // Tableau valeur Courant
+float MesDbt[1];                                           // Tableau valeur Débit
+float MaPress[1];                                          // Tableau valeur pression
+volatile int freqDebit2;
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -------------------------------       Réglages de bases     --------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void setup() 
+{
+  byte cpt;
+  pinMode(INTDEBIT2, INPUT_PULLUP);                       // Définition du mode du pin pour Débit   
+  Serial.begin(115200);                                   // Réglage des bauds du Serial
+  delay(500);
+  Serial1.begin(115200);                                  // Réglage des bauds de l'ESP8266
+  delay(500);
+  dataATRST();                                            // Reset de l'ESP8266
+  delay(2000);
+  dataAT();                                               // Fonction Commande AT
+  delay(2000);
+  dataCWMODE();                                           // Fonction Commande AT+CWMODE=1
+  delay(500);
+  dataWIFI();                                             // Fonction Connexion Wi-Fi
+  delay(500);
+  dataCIPMUX();                                           // Fonction Commande AT+CIPMUX=1
+  delay(500);
+  dataSERVER();                                           // Fonction Commande AT+CIPSERVER=1,80
+  delay(1000);
+  printWifiData();                                        // Fonction Récupération IP et MAC
+  delay(1000);
+  emon1.current(7, 60.606);                               // Current: input pin, calibration. (100a ÷ 50mA) ÷ 33 Ohm = 60.606
+  
+  MAX31850K.begin();
+  NbCapT = MAX31850K.getDeviceCount();                    // Récupérer le nombre des capteurs fonctionnels sur le bus
+  
+  for(cpt = 0; cpt < NbCapT; cpt++)                       // Récupérer et stocker les IDs des capteurs par index
+  {
+    if(MAX31850K.getAddress(IDsTemp[cpt], cpt) == true)
+    {
+      Serial.print("OK pour l'adresse du capteur Temp-"); // Affichage Ordinateur 
+      Serial.println(cpt);                
+    }
+    else
+    {
+      Serial.print("NOK pour l'adresse du capteur Temp-");// Affichage Ordinateur 
+      Serial.println(cpt);
+    }
+  }
+  MAX31850K.setWaitForConversion(false);                  // Ne pas bloquer le programme pendant la conversion de la température en nombre par MAX31850K
+  delay(200);
+  MAX31850K.requestTemperatures();                        // Ordonner aux MAX31850K de procéder à la conversion des températures
+  delay(200);                   
+  
+ attachInterrupt(2, cptImpulse2, RISING);                 // Fonction liée à INTDEBIT2
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ----------------------       Boucle qui s'exécute plusieurs fois     ------------------------ */
+
+/* --------------------------------------------------------------------------------------------- */
+
+
+void loop()
+{
+  Serial.println(" ");
+  dataStart();                                           // Fonction qui se connecte au serveur 
+  lireMesTemp();                                         // Fonction qui lit les Températures
+  lireMaPression();                                      // Fonction qui lit la Pression
+  lireMesCrt();                                          // Fonction qui lit les Courants
+  lireMesDbt();                                          // Fonction qui lit le Débit
+  envoieThingspeak();                                    // Fonction qui envoie les valeurs à Thingspeak                         
+  delay(10000);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------------       Fonction pour AT+RST     -------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataATRST()
+{
+  Serial1.println("AT+RST");                             // Permet de Reset l'ESP8266
+  delay(2000);
+  // Pour le debug
+  String ESPmsg = Serial1.readString();
+  Serial.println("Commande envoyée à l'ESP : AT+RST");
+    Serial.print("Message reçu : ");  
+  Serial.println(ESPmsg);
+  
+  if(ESPmsg.indexOf("OK")> 0 || ESPmsg.indexOf("DISCONNECT"))
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande RESET bien effectuée");      //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+    Serial.println("ERROR RESET");
+  }
+  Serial.println("-------------------------------------------------------------------------");
+  delay(500);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* --------------------------------       Fonction pour AT     --------------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataAT()
+{
+  Serial1.println("AT");
+  delay(500);
+  // Pour le debug
+  String ESPmsg = Serial1.readString();
+  Serial.println("Commande envoyée à l'ESP : AT");
+  Serial.print("Message reçu : ");  
+  Serial.println(ESPmsg); 
+  
+  if(ESPmsg.indexOf("OK")> 0 || ESPmsg.indexOf("O")>0)
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande AT configurée");             //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR AT");
+  }
+  Serial.println("-------------------------------------------------------------------------");
+  delay(2000);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ---------------------------       Fonction pour AT+CWMODE=1     ----------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataCWMODE()
+{
+  Serial1.println("AT+CWMODE=1");                         // Définiton du WIFI mode (1 = client)
+  
+  // Pour le debug
+//  String ESPmsg = Serial1.readString();
+//  Serial.println("Commande envoyée à l'ESP : AT+CWMODE=1");
+  //  Serial.print("Message reçu : ");  
+  //Serial.println(ESPmsg); 
+      String ESPmsg = Serial1.readString();
+      if(ESPmsg.indexOf("OK")> 0)
+  {                                                       ////////////////////////////////////////
+    Serial.println("WIFI MODE configuré");                //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR MODE");
+  }
+  
+}
+
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------       Fonction pour la connexion Wi-Fi     -------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+
+void dataWIFI()
+{
+  WiFi.init(&Serial1);                                    // Initialisation de l'ESP8266 au WiFi
+  delay(500);
+  if (WiFi.status() == WL_NO_SHIELD)                      // Présence d'un Shield ou non
+  {                    
+    Serial.println("WiFi shield not present");
+    delay(1000);
+  }
+  while ( status != WL_CONNECTED) {                       // Attend que cela se connecte au WiFi
+    Serial.println(" ");
+    Serial.print("Attempting to connect to WPA SSID: ");
+    Serial.println(ssid);
+    Serial.println("...........");
+    delay(400);
+    Serial.println(".........");
+    delay(400);
+    Serial.println(".......");
+    delay(400);
+    Serial.println(".....");
+    delay(400);
+    Serial.println("...");
+    delay(400);
+    Serial.println(".");
+    delay(10);
+    // Connect to WPA/WPA2 network
+    status = WiFi.begin(ssid, pass);                      // Connexion au WiFi avec un SSID et PASS
+    delay(8000);
+  }
+  Serial1.println("You're connected to the network");
+  Serial.println("-------------------------------------------------------------------------");
+}
+
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ---------------------------       Fonction pour AT+CIPMUX=1     ----------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataCIPMUX()
+{
+  Serial1.println("AT+CIPMUX=1");                         // Mise en place de la connexion Multiple
+  delay(500);
+  
+  // Pour le debug
+  String ESPmsg = Serial1.readString();
+  Serial.println("Commande envoyée à l'ESP : AT+CIPMUX=1");
+ 
+    if(ESPmsg.indexOf("OK")> 0)
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande MUX bien effectuée");        //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR MUX");
+  }
+  Serial.println("-------------------------------------------------------------------------");
+delay(5000);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* --------------------------       Fonction pour AT+CIPSERVER     ----------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataSERVER()
+{
+    Serial1.println("AT+CIPSERVER=1,80");                 // Déinition de l'identifiant et du port
+  
+  // Pour le debug
+  String ESPmsg = Serial1.readString();
+  Serial.println("Commande envoyée à l'ESP : AT+CIPSERVER=1,80");
+    Serial.print("Message reçu : ");  
+  Serial.println(ESPmsg);  
+  
+      if(ESPmsg.indexOf("OK")> 0)                                                       
+  {                                                       ////////////////////////////////////////
+    Serial.println("Serveur configuré");                  //                                    //
+  }                                                       //            Verification            //
+  else    // ESP8266 n'a bien répondu                     //                                    //
+  {                                                       ////////////////////////////////////////                 
+   Serial.println("ERROR SERVER");
+  }
+  Serial.println("-------------------------------------------------------------------------");
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* ---------------       Fonction pour Connexion au serveur, Get et Send     ------------------ */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void dataStart()
+{
+  String cmd = "AT+CIPSTART=1,\"TCP\",\"";             // Connexion au serveur Thingspeak
+  cmd += "184.106.153.149";                            // api.thingspeak.com
+  cmd += "\",80";                                      // Port utilisé
+  Serial1.println(cmd);
+  delay(300);
+               
+  String ESPmsg = Serial1.readString();   
+  Serial.println("Commande envoyée à l'ESP : AT+CIPSTART");
+  Serial.print("Message reçu : ");  
+  delay(300);
+  Serial.println(ESPmsg);
+      
+  if(ESPmsg.indexOf("OK")> 0 || ESPmsg.indexOf("SEND")> 0 || ESPmsg.indexOf("IPD")>0 || ESPmsg.indexOf("O")>0)
+  
+  {                                                       ////////////////////////////////////////
+    Serial.println("Commande START bien effectuée");      //                                    //
+  }                                                       //            Verification            //
+  else                                                    //                                    //
+  {                                                       ////////////////////////////////////////
+   Serial.println("ERROR START");
+  }
+  if(Serial1.find("busy"))
+  {
+    delay(10000);
+  }
+  delay(200);
+}
+
+void envoieThingspeak()                                   // Fonction qui envoie à Thingspeak
+{
+  String champTSP = APIKey;
+  byte cpt = 1, i;
+
+    for(i = 0; i < NbCapT; i++)                           // Boucle qui envoie les valeur du tableau
+  {                                                       // concernant les Températures (MesTemp[])
+    champTSP = champTSP + "&field" + cpt;
+    champTSP = champTSP + "=" + MesTemp[i];
+    cpt++;
+  }
+
+  for(i=0; i < 2; i++)                                    // Boucle qui envoie les valeur du tableau
+  {                                                       // concernant les Courant (MesCrt[])
+    champTSP = champTSP + "&field" + cpt;
+    champTSP = champTSP + "=" + MesCrt[i];
+    cpt++;
+  }
+  
+   for(i = 0; i < 1; i++)                                 // Boucle qui envoie les valeur du tableau
+  {                                                       // concernant le Débit (MesDbt[])
+    champTSP = champTSP + "&field" + cpt;
+    champTSP = champTSP + "=" + MesDbt[i];
+    cpt++;
+  }
+
+    for(i = 0; i < 1; i++)                                // Boucle qui envoie les valeur du tableau
+  {                                                       // concernant la Pression (MaPress[])
+    champTSP = champTSP + "&field" + cpt;
+    champTSP = champTSP + "=" + MaPress[i];
+    cpt++;
+  } 
+  
+  champTSP += "\r\n";
+  
+  String cmd;
+  cmd = "AT+CIPSEND=1,";
+  cmd += String(champTSP.length());                       // Commande AT qui envoie les données (avec sa longueur)
+  Serial1.println(cmd);
+
+  String ESPmsg = Serial1.readString();   
+  Serial.println("Commande envoyée à l'ESP : AT+CIPSEND");
+  Serial.print("Message reçu : ");  
+  delay(300);
+  Serial.println(ESPmsg);                                 // Visualisation du message réel renvoyé par l'ESP8266
+  delay(500);
+  Serial1.println(champTSP);
+  Serial.println("-------------------------------------------------------------------------");
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+/* -----------------------       Fonction pour récupérer IP et MAC     ------------------------- */
+
+/* --------------------------------------------------------------------------------------------- */
+
+void printWifiData()                                      // Permet de récupérer IP et MAC
+{
+  // print your WiFi shield's IP address
+  IPAddress ip = WiFi.localIP();
+  delay(5000);
+  Serial.print("IP Address: ");
+  delay(2000);
+  Serial.println(ip);
+  delay(2000);
+
+  // print your MAC address
+  byte mac[6];
+  delay(1000);
+  WiFi.macAddress(mac);
+  delay(1000);
+  char buf[20];
+  sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
+  delay(1000);
+  
+  Serial.print("MAC address: ");
+  delay(2000);
+  Serial.println(buf);
+  delay(1000);
+  Serial.println("-------------------------------------------------------------------------");
+}
+
+//################################################################################################################################################################################
+/*
+   Fonction de lecture des températures
+   Dans une boucle comptant le nombre de capteur, on vérifie que les ID des MAX31850K correspondent, puis on demande à la fonction de récupérer les valeurs de températures
+   en °C. Puis, nous implémentons la calibration (qui pourra être modifier pour chaque MAX31850K si l'on souhaite)
+*/
+//################################################################################################################################################################################
+void lireMesTemp()
+{
+  byte cpt;
+  String affichOrdi;
+  float Pente[4]{0.082,0.082,0.082,0.082};
+  float PointY[4]{13, 13, 13, 13};
+  
+  for (cpt = 0; cpt < NbCapT ; cpt++)                   // Parcourir un à un les capteurs
+  {
+    if(MAX31850K.isConnected(IDsTemp[cpt]) == true)    
+    {
+      MesTemp[cpt] = (((MAX31850K.getTempC(IDsTemp[cpt]))* Pente[cpt])-PointY[cpt]);
+      /* Affichage Ordinateur */
+      affichOrdi = "Capteur Temp-" + cpt; 
+      affichOrdi = affichOrdi + " : " + MesTemp[cpt];   
+      Serial.print(affichOrdi);                   
+      Serial.println(" °C");                      
+    }
+    else
+    {
+      MesTemp[cpt] = 0.0;
+
+      /* Affichage Ordinateur */
+      affichOrdi = "Capteur Temp-" + cpt; 
+      affichOrdi = affichOrdi + " déconnecté !";      
+      Serial.println(affichOrdi);                        // Affichage Ordinateur
+    }
+  }
+
+  MAX31850K.requestTemperatures();                       // Ordonner aux MAX31850K de procéder à la conversion des températures
+  delay(200);            
+
+}
+//################################################################################################################################################################################
+/*
+   Fonction de lecture des débits 
+   Active les intérruptions pendant 1 s, les désactive puis calcul le débit.
+   Le débit du capteur DIGITEN G1 est exprimé en Litres/heure avec une fréquence de F = 7,5 x Q (Q = débit en l/h)
+   Comme la mesure s'effectue toutes les sécondes --> (Q = Frequence * 60)/7,5
+*/
+//################################################################################################################################################################################
+
+void lireMesDbt()
+{
+  String affichOrdi;                                     // Déclaration des variables locales
+  
+  noInterrupts();                                        // Désactiver les intérruptions
+  
+  freqDebit2 = 0;                                        // (Re)Initialiser les compteurs d'impulsions
+  interrupts();                                          // Réactiver les intérruptions pendant 1 s, puis les désactiver à nouveau
+  delay(1000);
+  noInterrupts();
+  
+  MesDbt[0] = (freqDebit2 * 60) / 7.5;                   // Calcul du débit
+  
+  interrupts();                                          // Réactiver les intérruptions à nouveau
+  
+  affichOrdi = "Capteur Débit-0 : ";
+  affichOrdi = affichOrdi + MesDbt[0];        
+  Serial.print(affichOrdi);                   
+  Serial.println(" l/h");
+}
+
+
+
+//################################################################################################################################################################################
+/*
+  Fonction d'intérruption  INTDEBIT2 
+  Elle se déclenche à chaque front montant sur INTDEBIT2 et compte ces fronts montants (impulsions) 
+*/
+//################################################################################################################################################################################
+
+void cptImpulse2()              
+{
+  freqDebit2++;
+}
+
+void lireMaPression()                                    // Fonction pour mesurer la Pression
+{
+  int sensorVal= analogRead(A1);
+  float voltage = (sensorVal*5.0)/1024.0;                // Equation pour obtenir le voltage
+        Serial.print("Volts: ");
+        Serial.println(voltage);
+                                                         // Calcul et calibration pour Pascal, Bars, KiloPascal
+      MaPress[0] = (((float)voltage-0.47972969)*100);
+      float pressure_pascal = ((float)voltage-0.47972969)*1000000.0;
+      float pressure_bar = pressure_pascal/10e5;
+      float pressure_kilopascal = (pressure_pascal/10000);
+      Serial.print("Pressure = ");
+      Serial.print(pressure_bar);
+      Serial.println(" bars");
+      Serial.print(pressure_kilopascal);
+      Serial.println(" kilopascal");
+      delay(100);
+}
+
+//################################################################################################################################################################################
+/* 
+   Fonction de lecture des courants 
+   Le capteur CT SCT-013-000 délivre en sortie un courant alternatif moyen de 50 mA (pour 100 A en entrée) --> un courant alternatif pic à pic de : (50 mA x √2) x 2 = 141,4 mA.
+   Avec une résistance de 33 Ω pour transformer le courant en tension, la valeur maximale obtenue est : 141,4 mA x 33 Ω = 4,67 V --> 100 A = 4,67 V
+   Avec un convertisseur 5 V - 10 bits, Arduino converti la tension récue en un nombre compris entre 0 et 1023.
+   Comme dans notre cas, calcul ci-dessus, la tension maximale est de 4.67 V, la tension convertie sera un nombre compris entre 0 et 956 
+   La valeur du courant dans la fonction est obtenu par un produit en croix avec comme relation : 100 A = 4,67 V = 956 --> 100 A = 956
+   NB : Ce calcul pourrait être modifié lors du montage réel. 
+*/ 
+//################################################################################################################################################################################
+
+void lireMesCrt()
+{
+  byte cpt, pin;                                          // Déclaration des variables locales
+  double Courant, Courant2 = 0;
+  
+  String affichOrdi, affichOrdi2;
+
+  for (cpt=0; cpt < 2 ; cpt++)
+  {
+    pin = cpt+1;
+    MesCrt[cpt] = double(emon1.calcIrms(1480));
+    MesCrt[cpt] = (MesCrt[cpt] * 100)/956;
+    affichOrdi = "Capteur Courant-" + cpt;                // Affichage ordinateur
+    affichOrdi = affichOrdi + " : " + MesCrt[cpt];  
+    Serial.print(affichOrdi);                   
+    Serial.println(" A");
+  }
+}
