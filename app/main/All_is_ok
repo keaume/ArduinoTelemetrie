@@ -27,7 +27,6 @@
 #include <WiFiEsp.h>                      
 #include "EmonLib.h"
 
-
 /* --------------------------------------------------------------------------------------------- */
 
 /* -----------------------       Définitions des variables gloables     ------------------------ */
@@ -35,7 +34,6 @@
 /* --------------------------------------------------------------------------------------------- */
 
 #define APIKey "GET /update?api_key=NQR2DT5TAC8W6KWO"      // Définition de la clé Thingspeak utilisée
-          
 #define CMDMOSFET 49
 #define INTDEBIT2 21                        
 char ssid[] = "MARMOTT ENERGIES";                          // your network SSID (name)
@@ -514,12 +512,15 @@ void lireMaPression()
         Serial.print("Volts: ");
         Serial.println(voltage);
 
-      MaPress[0] = ((((float)voltage-0.47972969)*1000000.0)/10e5);
+      MaPress[0] = (((float)voltage-0.47972969)*100);
       float pressure_pascal = ((float)voltage-0.47972969)*1000000.0;
       float pressure_bar = pressure_pascal/10e5;
+      float pressure_kilopascal = (pressure_pascal/10000);
       Serial.print("Pressure = ");
       Serial.print(pressure_bar);
       Serial.println(" bars");
+      Serial.print(pressure_kilopascal);
+      Serial.println(" kilopascal");
       delay(100);
 }
 
@@ -550,7 +551,5 @@ void lireMesCrt()
     affichOrdi = affichOrdi + " : " + MesCrt[cpt];  
     Serial.print(affichOrdi);                   
     Serial.println(" A");
-
+  }
 }
-}
-
